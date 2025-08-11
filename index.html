@@ -1,0 +1,251 @@
+import React, { useMemo, useState, useEffect } from "react";
+
+export default function CalculateurPrix() {
+  const [piedsCarres, setPiedsCarres] = useSyncedNumber("pw_sqft", 2800);
+  const [tauxBase, setTauxBase] = useSyncedNumber("pw_baserate", 1.25);
+  const [ajustPct, setAjustPct] = useSyncedNumber("pw_adjust", 0);
+
+  const [nbSacs, setNbSacs] = useSyncedNumber("pw_bagcount", 25);
+  const [prixSac, setPrixSac] = useSyncedNumber("pw_bagprice", 44);
+  const [coutDivers, setCoutDivers] = useSyncedNumber("pw_bleachmisc", 25);
+
+  const [carburant, setCarburant] = useSyncedNumber("pw_fuel", 60);
+  const [usure, setUsure] = useSyncedNumber("pw_wear", 90);
+
+  const [heures, setHeures] = useSyncedNumber("pw_hours", 18);
+  const [tauxHoraire, setTauxHoraire] = useSyncedNumber("pw_rate", 75);
+
+  const prixRapide = useMemo(() => {
+    const base = piedsCarres * tauxBase;
+    const aj = base * (ajustPct / 100);
+    return clampMoney(base + aj);
+  }, [piedsCarres, tauxBase, ajustPct]);
+
+  const materiaux = useMemo(() => clampMoney(nbSacs * prixSac + coutDivers), [nbSacs, prixSac, coutDivers]);
+  const exploitation = useMemo(() => clampMoney(carburant + usure), [carburant, usure]);
+  const mainOeuvre = useMemo(() => clampMoney(heures * tauxHoraire), [heures, tauxHoraire]);
+
+  const coutBase = useMemo(() => clampMoney(materiaux + exploitation + mainOeuvre), [materiaux, exploitation, mainOeuvre]);
+  const marge40 = useMemo(() => clampMoney(coutBase * 1.4), [coutBase]);
+  const prixRapide40 = useMemo(() => clampMoney(prixRapide * 1.4), [prixRapide]);
+
+  const resetAll = () => {
+    if (!confirm("Réinitialiser toutes les valeurs ?")) return;
+    localStorage.clear();
+    location.reload();
+  };
+
+  const chargerExemple = () => {
+    setPiedsCarres(2800);
+    setTauxBase(1.25);
+    setAjustPct(0);
+    setNbSacs(25);
+    setPrixSac(44);
+    setCoutDivers(25);
+    setCarburant(60);
+    setUsure(90);
+    setHeures(18);
+    setTauxHoraire(75);
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-gray-50 text-gray-900">
+      <div className="mx-auto max-w-6xl p-6 md:p-10">
+        <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Calculateur de Prix – Lavage à pression</h1>
+            <p className="text-sm text-gray-600">Opérateur seul • Formule au pied carré + détails • Affiche coût de base et +40% marge</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={chargerExemple} className="px-3 py-2 rounded-xl bg-white shadow hover:shadow-md border">Charger exemple</button>
+            <button onClick={resetAll} className="px-3 py-2 rounded-xl bg-white shadow hover:shadow-md border">Réinitialiser</button>
+          </div>
+        </header>
+
+        <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-12">
+          <Carte className="md:col-span-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Calcul rapide au pied carré</h2>
+              <span className="text-xs text-gray-500">Pour devis instantané</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <ChampNum label="Pieds carrés" value={piedsCarres} setValue={setPiedsCarres} min={0} step={50} />
+              <ChampArgent label="Taux de base ($ / pi²)" value={tauxBase} setValue={setTauxBase} min={0} step={0.05} />
+              <ChampRange label="Ajustement (%)" value={ajustPct} setValue={setAjustPct} min={-50} max={50} />
+            </div>
+            <Separateur />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Stat label="Prix rapide" value={toMoney(prixRapide)} sub="Avant marge" />
+              <Stat label="Rapide +40%" value={toMoney(prixRapide40)} sub="Avec marge" highlight />
+              <div className="text-sm text-gray-600 flex items-center">Astuce : ajustez selon difficulté, déplacement, taches, urgence.</div>
+            </div>
+          </Carte>
+
+          <Carte className="md:col-span-4">
+            <h3 className="text-base font-semibold mb-3">Guide de taux</h3>
+            <ul className="text-sm list-disc pl-5 space-y-1 text-gray-700">
+              <li>Lavage léger : <strong>0,60–0,90 $</strong> / pi²</li>
+              <li>Lavage + sable polymère : <strong>1,10–1,50 $</strong> / pi²</li>
+              <li>Restauration lourde / taches : <strong>1,50–2,25 $</strong> / pi²</li>
+            </ul>
+          </Carte>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-4">Détails du calcul</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Carte>
+              <h3 className="font-semibold mb-3">Matériaux</h3>
+              <div className="space-y-3">
+                <ChampStep label="Nb sacs sable polymère" value={nbSacs} setValue={setNbSacs} step={1} min={0} />
+                <ChampArgent label="Prix par sac ($)" value={prixSac} setValue={setPrixSac} min={0} step={1} />
+                <ChampArgent label="Eau de javel & divers ($)" value={coutDivers} setValue={setCoutDivers} min={0} step={5} />
+              </div>
+              <Total label="Sous-total matériaux" value={materiaux} />
+            </Carte>
+
+            <Carte>
+              <h3 className="font-semibold mb-3">Coûts d'exploitation</h3>
+              <div className="space-y-3">
+                <ChampArgent label="Carburant ($)" value={carburant} setValue={setCarburant} min={0} step={5} />
+                <ChampArgent label="Usure équipement ($)" value={usure} setValue={setUsure} min={0} step={5} />
+              </div>
+              <Total label="Sous-total exploitation" value={exploitation} />
+            </Carte>
+
+            <Carte>
+              <h3 className="font-semibold mb-3">Main-d'œuvre</h3>
+              <div className="space-y-3">
+                <ChampStep label="Heures" value={heures} setValue={setHeures} step={1} min={0} />
+                <ChampArgent label="Taux horaire ($)" value={tauxHoraire} setValue={setTauxHoraire} min={0} step={5} />
+              </div>
+              <Total label="Sous-total main-d'œuvre" value={mainOeuvre} />
+            </Carte>
+          </div>
+        </section>
+
+        <section className="mb-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Carte>
+            <h3 className="font-semibold mb-2">Coût de base</h3>
+            <p className="text-3xl font-bold">{toMoney(coutBase)}</p>
+          </Carte>
+          <Carte>
+            <h3 className="font-semibold mb-2">Prix +40% marge</h3>
+            <p className="text-3xl font-bold">{toMoney(marge40)}</p>
+          </Carte>
+          <Carte>
+            <h3 className="font-semibold mb-2">Comparaison rapide</h3>
+            <div className="text-sm grid gap-1">
+              <div className="flex justify-between"><span>Prix rapide</span><span className="font-medium">{toMoney(prixRapide)}</span></div>
+              <div className="flex justify-between"><span>Rapide +40%</span><span className="font-medium">{toMoney(prixRapide40)}</span></div>
+            </div>
+          </Carte>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function Carte({ children, className = "" }) {
+  return <div className={`bg-white rounded-2xl shadow-sm border p-4 md:p-5 ${className}`}>{children}</div>;
+}
+
+function Separateur() {
+  return <div className="my-4 h-px bg-gray-200" />;
+}
+
+function Stat({ label, value, sub, highlight = false }) {
+  return (
+    <div className={`rounded-xl border p-4 ${highlight ? "bg-green-50 border-green-200" : "bg-gray-50"}`}>
+      <div className="text-xs text-gray-600">{label}</div>
+      <div className="text-2xl font-bold">{value}</div>
+      {sub && <div className="text-xs text-gray-500">{sub}</div>}
+    </div>
+  );
+}
+
+function Total({ label, value }) {
+  return (
+    <div className="mt-4 flex items-center justify-between border-t pt-3 text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className="font-semibold">{toMoney(value)}</span>
+    </div>
+  );
+}
+
+function ChampNum({ label, value, setValue, min = 0, step = 1 }) {
+  return (
+    <LigneLabel label={label}>
+      <input type="number" className="w-full rounded-xl border p-2" value={value} min={min} step={step} onChange={(e) => setValue(safeNum(e.target.value))} />
+    </LigneLabel>
+  );
+}
+
+function ChampArgent({ label, value, setValue, min = 0, step = 1 }) {
+  return (
+    <LigneLabel label={label}>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+        <input type="number" className="w-full rounded-xl border p-2 pl-7" value={value} min={min} step={step} onChange={(e) => setValue(safeNum(e.target.value))} />
+      </div>
+    </LigneLabel>
+  );
+}
+
+function ChampStep({ label, value, setValue, step = 1, min = 0 }) {
+  return (
+    <LigneLabel label={label}>
+      <div className="flex items-center gap-2">
+        <button type="button" className="px-3 py-2 rounded-xl border bg-white hover:bg-gray-50" onClick={() => setValue(Math.max(min, round2(value - step)))}>−</button>
+        <input type="number" className="w-full rounded-xl border p-2 text-center" value={value} min={min} step={step} onChange={(e) => setValue(safeNum(e.target.value))} />
+        <button type="button" className="px-3 py-2 rounded-xl border bg-white hover:bg-gray-50" onClick={() => setValue(round2(value + step))}>+</button>
+      </div>
+    </LigneLabel>
+  );
+}
+
+function ChampRange({ label, value, setValue, min = -50, max = 50 }) {
+  return (
+    <LigneLabel label={`${label}: ${value}%`}>
+      <input type="range" className="w-full" min={min} max={max} value={value} onChange={(e) => setValue(safeNum(e.target.value))} />
+    </LigneLabel>
+  );
+}
+
+function LigneLabel({ label, children }) {
+  return (
+    <label className="grid gap-1 text-sm">
+      <span className="text-gray-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function toMoney(n) {
+  if (!isFinite(n)) return "—";
+  return n.toLocaleString(undefined, { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
+}
+
+function safeNum(v) {
+  const n = Number(v);
+  return isFinite(n) ? n : 0;
+}
+
+function clampMoney(n) {
+  return Math.max(0, round2(n));
+}
+
+function round2(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+function useSyncedNumber(key, initial) {
+  const [val, setVal] = useState(() => {
+    const raw = localStorage.getItem(key);
+    return raw == null ? initial : Number(raw);
+  });
+  useEffect(() => {
+    localStorage.setItem(key, String(val));
+  }, [key, val]);
+  return [val, setVal];
+}
